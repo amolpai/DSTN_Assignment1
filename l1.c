@@ -112,9 +112,24 @@ short l1_TLBtoFrame(int TLBaddress)
 	return framebits;
 }
 
+int l1_TLBtoOffset(int TLBaddress)
+{
+	return (TLBaddress & 0b00000000000000000000000000001111);
+}
+
+int l1_TLBtoIndex(int TLBaddress)
+{
+	return ((TLBaddress & 0b00000000000000000000001111110000) >> 4);
+}
+
+
 int l1_LRU_victimBlock(int index)
 {
 	short lruBits = L1_instance.L1row[index].LRUBits;
+	for (int i=0; i<4; i++){
+		if ((L1_instance.L1row[index].valid_Tag[i] & 0b1000000000000000) == 0)  //if valid bit is zero, use this
+			return i;
+	}
 	if ((lruBits & 0b1111000000000000) == 0)
 		return 0;
 	else if ((lruBits & 0b0000111100000000) == 0)
@@ -189,10 +204,9 @@ void l1_cacheMiss(int TLBaddress, int index)
 
 
 
-int l1_comparator(int TLBaddress, char wayPrediciton, int index)
+int l1_comparator(short framebits, char wayPrediciton, int index)
 {
-	short frameBits = l1_TLBtoFrame(TLBaddress);
-	short valid_frameBits = frameBits | 0b1000000000000000;
+	short valid_frameBits = framebits | 0b1000000000000000;
 	short valid_Tag;
 	switch(wayPrediciton)
 	{
@@ -224,8 +238,9 @@ int l1_comparator(int TLBaddress, char wayPrediciton, int index)
 
 char l1_runner(int TLBaddress, int index, int offset)
 {
+	short framebits = l1_TLBtoFrame(TLBaddress);
 	int return_comparator;
-	return_comparator = l1_comparator(TLBaddress, 	L1_instance.L1row[index].wayPrediciton, index);
+	return_comparator = l1_comparator(framebits, 	L1_instance.L1row[index].wayPrediciton, index);
 	if (return_comparator >= 0)
 	{
 		// cache hit
@@ -237,34 +252,18 @@ char l1_runner(int TLBaddress, int index, int offset)
 	if (DEBUG) printf("Cache Miss on Way Prediction : %d\n",L1_instance.L1row[index].wayPrediciton);
 
 	// checks done in parallel in hardware
-	return_comparator = l1_comparator(TLBaddress, (L1_instance.L1row[index].wayPrediciton+1)%4, index);
-	if (return_comparator >= 0)
+	for (int i=1; i<=3; i++)
 	{
-		// cache hit
-		if (DEBUG) printf("Cache Hit after Way Prediction : %d\n", (L1_instance.L1row[index].wayPrediciton+1)%4);
-		if (LOG) printf("Cache Hit\n");
-		cacheHitCount++;
-		return  L1_instance.L1row[index].data[L1_BLOCK*return_comparator + offset];
+		return_comparator = l1_comparator(framebits, (L1_instance.L1row[index].wayPrediciton+i)%4, index);
+		if (return_comparator >= 0)
+		{
+			// cache hit
+			if (DEBUG) printf("Cache Hit after Way Prediction : %d\n", (L1_instance.L1row[index].wayPrediciton+i)%4);
+			if (LOG) printf("Cache Hit\n");
+			cacheHitCount++;
+			return  L1_instance.L1row[index].data[L1_BLOCK*return_comparator + offset];
+		}
 	}
-	return_comparator = l1_comparator(TLBaddress, (L1_instance.L1row[index].wayPrediciton+2)%4, index);
-	if (return_comparator >= 0)
-	{
-		// cache hit
-		if (DEBUG) printf("Cache Hit after Way Prediction : %d\n", (L1_instance.L1row[index].wayPrediciton+2)%4);
-		if (LOG) printf("Cache Hit\n");
-		cacheHitCount++;
-		return  L1_instance.L1row[index].data[L1_BLOCK*return_comparator + offset];
-	}
-	return_comparator = l1_comparator(TLBaddress, (L1_instance.L1row[index].wayPrediciton+3)%4, index);
-	if (return_comparator >= 0)
-	{
-		// cache hit
-		if (DEBUG) printf("Cache Hit after Way Prediction : %d\n", (L1_instance.L1row[index].wayPrediciton+3)%4);
-		if (LOG) printf("Cache Hit\n");
-		cacheHitCount++;
-		return  L1_instance.L1row[index].data[L1_BLOCK*return_comparator + offset];
-	}
-
 	// cache miss
 	cacheMissCount++;
 	if(DEBUG) printf("Complete Cache Miss\n");
@@ -273,6 +272,24 @@ char l1_runner(int TLBaddress, int index, int offset)
 	l1_runner(TLBaddress, index, offset);
 }
 
+
+void l1_invalidate_victimblock_of_l2(int TLBaddress)
+{
+	int index = l1_TLBtoIndex(TLBaddress);
+	int offset = l1_TLBtoOffset(TLBaddress);
+	short framebits = l1_TLBtoFrame(TLBaddress);
+	for (char i=0; i<4; i++){							//check for first half of victimblock of l2 in l1.
+		if (l1_comparator(framebits, i,index) >= 0)
+			L1_instance.L1row[index].valid_Tag[i] = (L1_instance.L1row[index].valid_Tag[i] & 0b0111111111111111);
+	}
+	if(index%2==0)			
+		index++;			//already checked for lower half(even index in l1) of block of l2, next check for upper half of block of l2.
+	else index--;			//alreaady checked for upper half(odd index in l1) of block of l2, next check for lower half of block of l2.
+	for (char i=0; i<4; i++){							//check for other half of victimblock of l2 in l1.
+		if (l1_comparator(framebits, i,index) >= 0)
+			L1_instance.L1row[index].valid_Tag[i] = (L1_instance.L1row[index].valid_Tag[i] & 0b0111111111111111);
+	}
+}
 
 
 int main()   //main for testing
@@ -292,8 +309,8 @@ int main()   //main for testing
 		// tlbaddress = tlbaddress & 0b00000001111111111111111111111111;
 		// int tlbaddress =strtol(input, NULL, 2); 
 		// printf("%d\n", tlbaddress);
-		int offset = tlbaddress & 0b00000000000000000000000000001111; 
-		int index = (tlbaddress & 0b00000000000000000000001111110000) >> 4;
+		int offset =  l1_TLBtoOffset(tlbaddress);
+		int index = l1_TLBtoIndex(tlbaddress);
 		printf("data = %d\n", l1_runner(tlbaddress, index,offset));
 	}
 	// checkInitialization();

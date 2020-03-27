@@ -10,12 +10,15 @@ extern void L1_initialize();
 extern void l1_valid_TagPrint ();
 extern void l1_checkInitialization();
 extern short l1_TLBtoFrame(int TLBaddress);
+extern int l1_TLBtoOffset(int TLBaddress);
+extern int l1_TLBtoIndex(int TLBaddress);
 extern int l1_LRU_victimBlock(int index);
 extern void l1_printLRUBits(int index);
 extern void l1_LRU_Update(int index, char wayPrediciton);
 extern void l1_getBlockFromL2(int TLBaddress);
 extern void l1_cacheMiss(int TLBaddress, int index);
-extern int l1_comparator(int TLBaddress, char wayPrediciton, int index);
+extern int l1_comparator(short framebits, char wayPrediciton, int index);
 extern char l1_runner(int TLBaddress, int index, int offset);
 extern void l1_spaceRemover(char *s);
+extern void l1_invalidate_victimblock_of_l2(int TLBaddress);
 
