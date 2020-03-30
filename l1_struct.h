@@ -3,8 +3,8 @@
 #include <time.h>
 #define ENTRIES 64
 #define L1_BLOCK 16
-#define DEBUG 0
-#define LOG 1
+#define DEBUG 1
+#define LOG 0
 
 typedef struct 
 {
