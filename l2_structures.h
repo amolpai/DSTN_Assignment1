@@ -17,7 +17,7 @@ typedef struct {
 	bool valid;
 	bool dirty;
 	int tag;
-	char data[L2_BLOCK];
+	char data[L2_BLOCK+1];
 } l2_entry;
 
 typedef struct {
