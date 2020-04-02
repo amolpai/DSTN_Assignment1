@@ -1,17 +1,48 @@
 #include "l1.h"
+// #include "l2_cache.h"
+
+
+void l1_space_remover(char *s);
+void l1_fill(char *arr, int size, int value);
+void l1_binary_representation_int(int n);
+void l1_binary_representation_short(short n);
+int l1_or_array(char *arr, int size);
+void l1_row_initialize(L1_row *L1row);
+void l1_initialize();
+void l1_valid_tag_print ();
+void l1_check_initialization();
+short l1_physical_address_to_framebits(int physical_address);
+int l1_physical_address_to_offset(int physical_address);
+int l1_physical_address_to_index(int physical_address);
+int l1_lru_victim_block(int index);
+void l1_print_lru_bits(int index);
+void l1_lru_update(int index, char wayPrediciton);
+void l1_service_cache_miss(int physical_address, int index);
+int l1_cache_hit_or_miss(short framebits, char wayPrediciton, int index);
+
+
 
 int cacheHitCount = 0;
 int cacheMissCount = 0;
 
 L1 L1_instance; // L1 cache is global
 char bus16B[L1_BLOCK]; //bus for getting data from l2
+char processor_to_l1_bus;
 
-short l1_getAddressFromTLB() //getting address from TLB
+
+void l2_write_from_l1_to_l2(int physical_address)      	//defined in l2, here to just test
 {
-	return 0;
+	return ;
+}
+void l2_read_to_l1(int physical_address)				//defined in l2.
+{
+	srand(time(0));
+	for (int i=0; i<L1_BLOCK; i++)
+		bus16B[i] = rand();
 }
 
-void l1_spaceRemover(char *s)
+
+void l1_space_remover(char *s)
 {
 	char *d = s;
 	while (*d!=0)
@@ -38,7 +69,8 @@ void l1_fill(char *arr, int size, int value)
 }
 
 
-void l1_BinaryRepInt(int n)
+
+void l1_binary_representation_int(int n)
 {
 	unsigned int x = 0b10000000000000000000000000000000;
 	for (int i=0; i<32; i++)
@@ -50,7 +82,7 @@ void l1_BinaryRepInt(int n)
 }
 
 
-void l1_BinaryRepShort(short n)
+void l1_binary_representation_short(short n)
 {
 	unsigned short x = 0b1000000000000000;
 	for (int i=0; i<16; i++)
@@ -61,6 +93,7 @@ void l1_BinaryRepShort(short n)
 		x = x>>1;
 	}
 }
+
 
 int l1_or_array(char *arr, int size)
 {	
@@ -73,21 +106,21 @@ int l1_or_array(char *arr, int size)
 }
 
 
-void L1_row_initialize(L1_row *L1row)
+void l1_row_initialize(L1_row *L1row)
 {
 	l1_fill((char *)L1row, sizeof(*L1row),0);
 }
 
-void L1_initialize()
+void l1_initialize()
 {
 	for (int i =0; i<ENTRIES; i++)
 	{
-		L1_row_initialize(&(L1_instance.L1row[i]));
+		l1_row_initialize(&(L1_instance.L1row[i]));
 	}
 }
 
 
-void l1_valid_TagPrint ()
+void l1_valid_tag_print ()
 {
 	for (int i=0; i<ENTRIES; i++)
 	{
@@ -98,7 +131,7 @@ void l1_valid_TagPrint ()
 	}
 }
 
-void l1_checkInitialization()
+void l1_check_initialization()
 {
 	for (int i=0; i<ENTRIES; i++)
 	{
@@ -106,15 +139,30 @@ void l1_checkInitialization()
 	}
 }
 
-short l1_TLBtoFrame(int TLBaddress)
+short l1_physical_address_to_framebits(int physical_address)
 {
-	short framebits = TLBaddress >> 10;
+	short framebits = physical_address >> 10;
 	return framebits;
 }
 
-int l1_LRU_victimBlock(int index)
+int l1_physical_address_to_offset(int physical_address)
+{
+	return (physical_address & 0b00000000000000000000000000001111);
+}
+
+int l1_physical_address_to_index(int physical_address)
+{
+	return ((physical_address & 0b00000000000000000000001111110000) >> 4);
+}
+
+
+int l1_lru_victim_block(int index)
 {
 	short lruBits = L1_instance.L1row[index].LRUBits;
+	for (int i=0; i<4; i++){
+		if ((L1_instance.L1row[index].valid_Tag[i] & 0b1000000000000000) == 0)  //if valid bit is zero, use this
+			return i;
+	}
 	if ((lruBits & 0b1111000000000000) == 0)
 		return 0;
 	else if ((lruBits & 0b0000111100000000) == 0)
@@ -125,18 +173,18 @@ int l1_LRU_victimBlock(int index)
 		return 3;
 }
 
-void l1_printLRUBits(int index)
+void l1_print_lru_bits(int index)
 {
-	l1_BinaryRepShort(L1_instance.L1row[index].LRUBits);
+	l1_binary_representation_short(L1_instance.L1row[index].LRUBits);
 }
 
-void l1_LRU_Update(int index, char wayPrediciton)  //on hit
+void l1_lru_update(int index, char wayPrediciton)  //on hit
 {
 	if (DEBUG) 
 	{
 		// printf("wayPrediciton : %d\n", wayPrediciton);
 		printf("lruBits : before update\n");	
-		l1_printLRUBits(index);
+		l1_print_lru_bits(index);
 	}
 	switch(wayPrediciton)
 	{
@@ -160,24 +208,19 @@ void l1_LRU_Update(int index, char wayPrediciton)  //on hit
 	if (DEBUG) 
 	{
 		printf("lruBits : after update\n");
-		l1_printLRUBits(index);
+		l1_print_lru_bits(index);
 	}
 }
 
-void l1_getBlockFromL2(int TLBaddress)
-{
-	srand(time(0));
-	for (int i=0; i<L1_BLOCK; i++)
-		bus16B[i] = rand();
-}
 
 
-void l1_cacheMiss(int TLBaddress, int index)
+void l1_service_cache_miss(int physical_address, int index)
 {
-	short framebits = l1_TLBtoFrame(TLBaddress);
+	short framebits = l1_physical_address_to_framebits(physical_address);
 	framebits = framebits | 0b1000000000000000;
-	l1_getBlockFromL2(TLBaddress);
-	int victimBlock = l1_LRU_victimBlock(index);
+	l2_read_to_l1(physical_address);
+	int victimBlock = l1_lru_victim_block
+(index);
 	if (DEBUG) printf("victimBlock : %d\n", victimBlock);
 	L1_instance.L1row[index].valid_Tag[victimBlock] = framebits;
 	for (int i =0; i<L1_BLOCK; i++)
@@ -189,10 +232,9 @@ void l1_cacheMiss(int TLBaddress, int index)
 
 
 
-int l1_comparator(int TLBaddress, char wayPrediciton, int index)
+int l1_cache_hit_or_miss(short framebits, char wayPrediciton, int index)
 {
-	short frameBits = l1_TLBtoFrame(TLBaddress);
-	short valid_frameBits = frameBits | 0b1000000000000000;
+	short valid_framebits = framebits | 0b1000000000000000;
 	short valid_Tag;
 	switch(wayPrediciton)
 	{
@@ -213,19 +255,20 @@ int l1_comparator(int TLBaddress, char wayPrediciton, int index)
 	}
 	if ((valid_Tag & 0b1000000000000000) == 0)
 		return -1; //invalid 
-	else if (valid_Tag == valid_frameBits)
+	else if (valid_Tag == valid_framebits)
 	{	
-		l1_LRU_Update(index, wayPrediciton);
+		l1_lru_update(index, wayPrediciton);
 		return wayPrediciton; //hit
 	}
 	else return -2;  //cache miss
 }
 
 
-char l1_runner(int TLBaddress, int index, int offset)
+char l1_read_from_l1_to_processor(int physical_address, int index, int offset)
 {
+	short framebits = l1_physical_address_to_framebits(physical_address);
 	int return_comparator;
-	return_comparator = l1_comparator(TLBaddress, 	L1_instance.L1row[index].wayPrediciton, index);
+	return_comparator = l1_cache_hit_or_miss(framebits, L1_instance.L1row[index].wayPrediciton, index);
 	if (return_comparator >= 0)
 	{
 		// cache hit
@@ -237,40 +280,75 @@ char l1_runner(int TLBaddress, int index, int offset)
 	if (DEBUG) printf("Cache Miss on Way Prediction : %d\n",L1_instance.L1row[index].wayPrediciton);
 
 	// checks done in parallel in hardware
-	return_comparator = l1_comparator(TLBaddress, (L1_instance.L1row[index].wayPrediciton+1)%4, index);
-	if (return_comparator >= 0)
+	for (int i=1; i<=3; i++)
 	{
-		// cache hit
-		if (DEBUG) printf("Cache Hit after Way Prediction : %d\n", (L1_instance.L1row[index].wayPrediciton+1)%4);
-		if (LOG) printf("Cache Hit\n");
-		cacheHitCount++;
-		return  L1_instance.L1row[index].data[L1_BLOCK*return_comparator + offset];
+		return_comparator = l1_cache_hit_or_miss(framebits, (L1_instance.L1row[index].wayPrediciton+i)%4, index);
+		if (return_comparator >= 0)
+		{
+			// cache hit
+			if (DEBUG) printf("Cache Hit after Way Prediction : %d\n", (L1_instance.L1row[index].wayPrediciton+i)%4);
+			if (LOG) printf("Cache Hit\n");
+			cacheHitCount++;
+			return  L1_instance.L1row[index].data[L1_BLOCK*return_comparator + offset];
+		}
 	}
-	return_comparator = l1_comparator(TLBaddress, (L1_instance.L1row[index].wayPrediciton+2)%4, index);
-	if (return_comparator >= 0)
-	{
-		// cache hit
-		if (DEBUG) printf("Cache Hit after Way Prediction : %d\n", (L1_instance.L1row[index].wayPrediciton+2)%4);
-		if (LOG) printf("Cache Hit\n");
-		cacheHitCount++;
-		return  L1_instance.L1row[index].data[L1_BLOCK*return_comparator + offset];
-	}
-	return_comparator = l1_comparator(TLBaddress, (L1_instance.L1row[index].wayPrediciton+3)%4, index);
-	if (return_comparator >= 0)
-	{
-		// cache hit
-		if (DEBUG) printf("Cache Hit after Way Prediction : %d\n", (L1_instance.L1row[index].wayPrediciton+3)%4);
-		if (LOG) printf("Cache Hit\n");
-		cacheHitCount++;
-		return  L1_instance.L1row[index].data[L1_BLOCK*return_comparator + offset];
-	}
-
 	// cache miss
 	cacheMissCount++;
 	if(DEBUG) printf("Complete Cache Miss\n");
 	if (LOG) printf("Cache miss\n");
-	l1_cacheMiss(TLBaddress, index);
-	l1_runner(TLBaddress, index, offset);
+	l1_service_cache_miss(physical_address, index);
+	return l1_read_from_l1_to_processor(physical_address, index, offset);
+}
+
+
+
+
+void l1_write_from_processor_to_l1(int physical_address, int index, int offset)
+{
+	short framebits = l1_physical_address_to_framebits(physical_address);
+	int return_comparator;
+	return_comparator = l1_cache_hit_or_miss(framebits, L1_instance.L1row[index].wayPrediciton, index);
+	if (return_comparator >= 0)
+	{
+		// cache hit
+		if (DEBUG) printf("Cache Hit on way Prediction : %d\n", L1_instance.L1row[index].wayPrediciton);
+		if (LOG) printf("Cache Hit\n");
+		cacheHitCount++;
+		L1_instance.L1row[index].data[L1_BLOCK*return_comparator + offset] = processor_to_l1_bus;
+		for (int j=0; j<L1_BLOCK; j++)
+		{
+			bus16B[j] = L1_instance.L1row[index].data[L1_BLOCK*return_comparator + j];
+		}
+		l2_write_from_l1_to_l2(physical_address);
+		return ;
+	}
+	if (DEBUG) printf("Cache Miss on Way Prediction : %d\n",L1_instance.L1row[index].wayPrediciton);
+
+	// checks done in parallel in hardware
+	for (int i=1; i<=3; i++)
+	{
+		return_comparator = l1_cache_hit_or_miss(framebits, (L1_instance.L1row[index].wayPrediciton+i)%4, index);
+		if (return_comparator >= 0)
+		{
+			// cache hit
+			if (DEBUG) printf("Cache Hit after Way Prediction : %d\n", (L1_instance.L1row[index].wayPrediciton+i)%4);
+			if (LOG) printf("Cache Hit\n");
+			cacheHitCount++;
+			L1_instance.L1row[index].data[L1_BLOCK*return_comparator + offset] = processor_to_l1_bus;
+			for (int j=0; j<L1_BLOCK; j++)
+			{
+				bus16B[j] = L1_instance.L1row[index].data[L1_BLOCK*return_comparator + j];
+			}
+			l2_write_from_l1_to_l2(physical_address);
+			return ;
+		}
+	}
+	// cache miss
+	cacheMissCount++;
+	if(DEBUG) printf("Complete Cache Miss\n");
+	if (LOG) printf("Cache miss\n");
+	l1_service_cache_miss(physical_address, index);
+	l1_write_from_processor_to_l1(physical_address, index, offset);
 }
 
 
@@ -280,21 +358,26 @@ int main()   //main for testing
 	
 	printf("sizeof cache: %ld\n", sizeof(L1_instance));
 	printf("sizeof row : %ld\n", sizeof(L1_instance.L1row[0]));
-	L1_initialize();
+	l1_initialize();
 
 	FILE * fp = fopen("VORTEX.txt", "r");
 	char input[50];
+	int cnt=1;
 	while (fgets(input, 50, fp)!=NULL)
 	{
 		printf("%s", input);
-		l1_spaceRemover(input);
-		int tlbaddress =strtol(input, NULL, 16); 
-		// tlbaddress = tlbaddress & 0b00000001111111111111111111111111;
-		// int tlbaddress =strtol(input, NULL, 2); 
-		// printf("%d\n", tlbaddress);
-		int offset = tlbaddress & 0b00000000000000000000000000001111; 
-		int index = (tlbaddress & 0b00000000000000000000001111110000) >> 4;
-		printf("data = %d\n", l1_runner(tlbaddress, index,offset));
+		l1_space_remover(input);
+		int virtual_address =strtol(input, NULL, 16);
+		int phy_add = virtual_address & 0b00000001111111111111111111111111;
+		int offset =  l1_physical_address_to_offset(phy_add);
+		int index = l1_physical_address_to_index(phy_add);
+		if(cnt)
+			l1_read_from_l1_to_processor(phy_add, index, offset);
+		else
+			l1_write_from_processor_to_l1(phy_add, index, offset);
+		cnt++;
+		cnt=cnt%2;
+		// printf("data = %d\n", l1_read_from_l1_to_processor(tlbaddress, index,offset));
 	}
 	// checkInitialization();
 	printf("Total Cache Hits: %d\n", cacheHitCount);
